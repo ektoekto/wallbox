@@ -1,0 +1,314 @@
+[
+    {
+        "id": "a6c7fbc21c6454ac",
+        "type": "tab",
+        "label": "Flow 4",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "436c8895897a273e",
+        "type": "http in",
+        "z": "a6c7fbc21c6454ac",
+        "name": "",
+        "url": "wallbox",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 210,
+        "y": 400,
+        "wires": [
+            [
+                "24e11788a9665e2f"
+            ]
+        ]
+    },
+    {
+        "id": "7db5e149aa9b3157",
+        "type": "function",
+        "z": "a6c7fbc21c6454ac",
+        "name": "check wallbox global",
+        "func": "msg.payload = global.get(\"wallbox\");\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 500,
+        "wires": [
+            [
+                "b69d4326021c2392"
+            ]
+        ]
+    },
+    {
+        "id": "b69d4326021c2392",
+        "type": "debug",
+        "z": "a6c7fbc21c6454ac",
+        "name": "global",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 650,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "985ee7b3449e081e",
+        "type": "inject",
+        "z": "a6c7fbc21c6454ac",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 220,
+        "y": 500,
+        "wires": [
+            [
+                "7db5e149aa9b3157"
+            ]
+        ]
+    },
+    {
+        "id": "643a5d43c6221ae2",
+        "type": "http request",
+        "z": "a6c7fbc21c6454ac",
+        "name": "send request",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 810,
+        "y": 400,
+        "wires": [
+            [
+                "24e11788a9665e2f"
+            ]
+        ]
+    },
+    {
+        "id": "aae00b192407c5f0",
+        "type": "http response",
+        "z": "a6c7fbc21c6454ac",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 610,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "24e11788a9665e2f",
+        "type": "function",
+        "z": "a6c7fbc21c6454ac",
+        "name": "wallbox comm",
+        "func": "// user name and password \nconst username = \"email.address@provider.com\";\nconst password = \"12345678\";\n\n// setup\nlet messages = [];\nlet actionName\nlet wallbox = global.get(\"wallbox\");\nif (wallbox === undefined) {\n    wallbox = {};\n    global.set(\"wallbox\", wallbox);\n}\nlet errorState = global.get(\"wallbox.errorState\");\nif (errorState === undefined) {\n    errorState = 1; // 0=has token, 1=no token, 2=update chargers\n    global.set(\"wallbox.errorState\", errorState);\n}\nlet selected\n\nlet text = \"idle\"\nlet fill = \"gray\"\n\nconst statuses = [\n    { name: \"WAITING\", values: [164, 180, 181, 183, 184, 185, 186, 187, 188, 189] },\n    { name: \"CHARGING\", values: [193, 194, 195] },\n    { name: \"READY\", values: [161, 162] },\n    { name: \"PAUSED\", values: [178, 182] },\n    { name: \"SCHEDULED\", values: [177, 179] },\n    { name: \"DISCHARGING\", values: [196] },\n    { name: \"ERROR\", values: [14, 15] },\n    { name: \"DISCONNECTED\", values: [0, 163, null] },\n    { name: \"LOCKED\", values: [209, 210, 165] },\n    { name: \"UPDATING\", values: [166] }\n];\n\nconst actionsTable = [\n    { name: \"RESUME\", values: [1] },\n    { name: \"PAUSE\", values: [2] },\n    { name: \"REBOOT\", values: [3] },\n    { name: \"FACTORY RESET\", values: [4] },\n    { name: \"UPDATE\", values: [5] },\n    { name: \"RESUME AFTER MANUAL STOP\", values: [9] }\n]\n\nfunction getStatusNameByNumber(number) {\n    for (let status of statuses) {\n        if (status.values.includes(number)) {\n            return status.name;\n        }\n    }\n    return \"Unknown Status\";\n}\nfunction getActionNameByNumber(number) {\n    for (let action of actionsTable) {\n        if (action.values.includes(number)) {\n            return action.name;\n        }\n    }\n    return \"Unknown action\";\n}\n\nconst actions = {\n    unlock: function (selected){\n        for (let i = 0; i < selected.length; i++) {\n            let newMsg = {}\n            newMsg.method = \"PUT\";\n            newMsg.url = `https://api.wall-box.com/v2/charger/${selected[i].id}`;\n            newMsg.headers = {\n                \"Authorization\": \"Bearer \" + wallbox.jwt,\n                \"Accept\": \"application/json\",\n                \"Content-Type\": \"application/json\"\n            };\n            newMsg.payload = {\n                \"locked\": 0\n            };\n            messages.push(newMsg);\n        }\n    },\n    lock: function (selected) {\n        for (let i = 0; i < selected.length; i++) {\n            let newMsg = {}\n            newMsg.method = \"PUT\";\n            newMsg.url = `https://api.wall-box.com/v2/charger/${selected[i].id}`;\n            newMsg.headers = {\n                \"Authorization\": \"Bearer \" + wallbox.jwt,\n                \"Accept\": \"application/json\",\n                \"Content-Type\": \"application/json\"\n            };\n            newMsg.payload = {\n                \"locked\": 1\n            };\n            messages.push(newMsg);\n        }\n    },\n    login: function (selected){\n        let newMsg = {};\n        // Base64-coding (Basic Auth)\n        let authString = username + \":\" + password;\n        let encodedAuth = Buffer.from(authString).toString(\"base64\");\n        newMsg.method = \"GET\";\n        newMsg.url = \"https://user-api.wall-box.com/users/signin\";\n        newMsg.headers = {\n            \"Authorization\": \"Basic \" + encodedAuth,\n            \"Accept\": \"application/json\",\n            \"Partner\": \"wallbox\"\n        };\n        messages.push(newMsg);\n    },\n    charges: function (selected) {\n        let newMsg = {};\n        newMsg.method = \"GET\";\n        newMsg.url = \"https://api.wall-box.com/v3/chargers/groups\";\n        newMsg.headers = {\n            \"Authorization\": \"Bearer \" + wallbox.jwt,\n            \"Accept\": \"application/json\"\n        };\n        messages.push(newMsg);\n    },\n    status: function (selected) {\n        let newMsg = {};\n        newMsg.method = \"GET\";\n        newMsg.url = \"https://api.wall-box.com/v3/chargers/groups\";\n        newMsg.headers = {\n            \"Authorization\": \"Bearer \" + wallbox.jwt,\n            \"Accept\": \"application/json\"\n        };\n        messages.push(newMsg);\n    },\n    pause: function (selected) {\n        for (let i = 0; i < selected.length; i++) {\n            let newMsg = {}\n            newMsg.method = \"POST\";\n            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;\n            newMsg.headers = {\n                \"Authorization\": \"Bearer \" + wallbox.jwt,\n                \"Accept\": \"application/json\",\n                \"Content-Type\": \"application/json\"\n            };\n            newMsg.payload = {\n                \"action\": 2\n            };\n            messages.push(newMsg);\n        }\n    },\n    resume: function (selected) {\n        for (let i = 0; i < selected.length; i++) {\n            let newMsg = {}\n            newMsg.method = \"POST\";\n            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;\n            newMsg.headers = {\n                \"Authorization\": \"Bearer \" + wallbox.jwt,\n                \"Accept\": \"application/json\",\n                \"Content-Type\": \"application/json\"\n            };\n            newMsg.payload = {\n                \"action\": 1\n            };\n            messages.push(newMsg);\n        }\n    },\n    reboot: function (selected) {\n        for (let i = 0; i < selected.length; i++) {\n            let newMsg = {}\n            newMsg.method = \"POST\";\n            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;\n            newMsg.headers = {\n                \"Authorization\": \"Bearer \" + wallbox.jwt,\n                \"Accept\": \"application/json\",\n                \"Content-Type\": \"application/json\"\n            };\n            newMsg.payload = {\n                \"action\": 3\n            };\n            messages.push(newMsg);\n        }\n    },\n    update: function (selected) {\n        for (let i = 0; i < selected.length; i++) {\n            let newMsg = {}\n            newMsg.method = \"POST\";\n            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;\n            newMsg.headers = {\n                \"Authorization\": \"Bearer \" + wallbox.jwt,\n                \"Accept\": \"application/json\",\n                \"Content-Type\": \"application/json\"\n            };\n            newMsg.payload = {\n                \"action\": 5\n            };\n            messages.push(newMsg);\n        }\n    },\n    reset: function (selected) {\n        global.set(\"wallbox\", {});\n        flow.keys().then(keys => {\n            keys.forEach(key => flow.set(key, null));\n        });\n    }\n\n};\n\n// filtering chargers\nfunction filterByProperty(array, property, value) {\n    return array.filter(obj =>\n        obj[property] && obj[property].toString().toLowerCase() === value.toString().toLowerCase()\n    );\n}\n\n// if error is recieved\nif (msg.payload && msg.payload.errors !== undefined){\n    for (let i = 0; i < msg.payload.errors.length; i++) {\n        if (msg.payload.errors[i].status === \"401\"){\n            errorState = 1;\n            global.set(\"wallbox.errorState\", errorState);\n        } else {\n            let response = msg.payload.errors[i].status\n            node.warn(response);\n            text = response\n            fill = \"red\"\n        }\n    }\n}\n\n// if action is recieved\nif (msg.payload && msg.payload.action !== undefined){\n    let storedRes = flow.get(\"wallbox_response\");\n    let responseMsg\n    let action = getActionNameByNumber(msg.payload.action)\n    if (storedRes) {\n        responseMsg = {\n            payload: action + \" was successful. \",\n            _msgid: storedRes._msgid,\n            res: storedRes\n        };\n    } else {\n        responseMsg = {\n            payload: action + \" was successful. \"\n        }\n    }\n    text = action\n    fill = \"green\"\n    node.send([responseMsg, null]);\n    global.set(\"wallbox.recieve\", undefined);\n    flow.set(\"wallbox_response\", null);\n}\n\n// if code is recieved\nif (msg.payload && msg.payload.code !== undefined){\n    if (msg.payload.code === 401){\n        errorState = 1;\n    } else {\n        let storedRes = flow.get(\"wallbox_response\");\n        let responseMsg\n        let codeMsg = msg.payload.msg\n        if (storedRes) {\n            responseMsg = {\n                payload: \"command \" + wallbox.recieve.command + \" was not successful. \",\n                _msgid: storedRes._msgid,\n                res: storedRes\n            };\n        } else {\n            responseMsg = {\n                payload: \"command \" + wallbox.recieve.command + \" was not successful. \"\n            }\n        }\n        text = \"Code: \" + msg.payload.code\n        fill = \"red\"\n        if (codeMsg) {\n            responseMsg.payload = responseMsg.payload + codeMsg\n        }\n        node.send([responseMsg, null]);\n        global.set(\"wallbox.recieve\", undefined);\n        flow.set(\"wallbox_response\", null);\n    }\n\n}\n\n// if the token is recieved\nif (msg.payload && msg.payload.data && msg.payload.data.type !== undefined){\n    if (msg.payload.data.type === \"user_signin\"){\n        let jwtToken = msg.payload.data.attributes.token;\n        global.set(\"wallbox.jwt\", jwtToken);\n        errorState = 2;\n        global.set(\"wallbox.errorState\", errorState);\n    }\n}\n\n// if chargers are recieved\nif (msg.payload && msg.payload.result && msg.payload.result.groups !== undefined){\n    let groups = msg.payload?.result?.groups || [];\n        if (groups.length > 0 && groups[0].chargers) {\n            global.set(\"wallbox.chargers\", msg.payload.result.groups[0].chargers)\n            errorState = 0;\n            global.set(\"wallbox.errorState\", errorState);\n            if (wallbox.recieve && wallbox.recieve.command !== undefined) {\n                if (wallbox.recieve.command === \"status\"){\n                    if ((wallbox.recieve && wallbox.recieve.parameter && wallbox.recieve.value !== undefined) && wallbox.chargers) {\n                        selected = filterByProperty(wallbox.chargers, wallbox.recieve.parameter, wallbox.recieve.value);\n                        if (selected.length === 0) {\n                            node.warn(\"parameter or value did not macth\");\n                            selected = wallbox.chargers;\n                        }\n                    }\n                    if (!selected) {\n                        node.warn(\"parameters not given\");\n                        selected = wallbox.chargers;\n                    }\n                    let statusMessage = \"\"\n                    for (let i = 0; i < selected.length; i++) {\n                        statusMessage = statusMessage + selected[i].name + \" is \" + getStatusNameByNumber(selected[i].status) + \".\\n\"\n                    }\n                    let storedRes = flow.get(\"wallbox_response\");\n                    let responseMsg\n                    if (storedRes) {\n                        responseMsg = {\n                            payload: statusMessage,\n                            _msgid: storedRes._msgid,\n                            res: storedRes\n                        };\n                    } else {\n                        responseMsg = {\n                            payload: statusMessage\n                        }\n                    }\n                    node.send([responseMsg, null]);\n                    global.set(\"wallbox.recieve\", undefined);\n                    flow.set(\"wallbox_response\", null);\n                    text = \"Status\"\n                    fill = \"green\"\n                }\n            }\n        }\n        else {\n            let response = \"No chargers on the account\"\n            text = response\n            fill = \"red\"\n        }\n}\n\n\n// if command is recieved\nif (msg.payload && msg.payload.command !== undefined){\n    if (msg.res) {\n        let safeRes = {\n            _res: msg.res._res,\n            _msgid: msg._msgid\n        };\n        flow.set(\"wallbox_response\", safeRes);\n    }\n    global.set(\"wallbox.recieve\", undefined);\n    global.set(\"wallbox.recieve\", msg.payload);\n}\n\n// if command response is recieved\nif (msg.payload && msg.payload.data && msg.payload.data.chargerData && wallbox.recieve !== undefined){\n    let storedRes = flow.get(\"wallbox_response\");\n    let responseMsg\n    if (storedRes) {\n        responseMsg = {\n            payload: \"command \" + wallbox.recieve.command + \" was successful.\",\n            _msgid: storedRes._msgid,\n            res: storedRes\n        };\n    } else {\n        responseMsg = {\n            payload: \"command \" + wallbox.recieve.command + \" was successful.\"\n        }\n    }\n    text = \"Command\"\n    fill = \"green\"\n    node.send([responseMsg, null]);\n    global.set(\"wallbox.recieve\", undefined);\n    flow.set(\"wallbox_response\", null);\n}\n\nif (errorState === 0){\n    if (wallbox.recieve && wallbox.recieve.command !== undefined){\n        actionName = wallbox.recieve.command\n    }\n}\n\nif (errorState === 1) {\n    actionName = \"login\"\n}\n\nif (errorState === 2) {\n    actionName = \"charges\"\n}\n\nif (actionName){\n    if ((wallbox.recieve && wallbox.recieve.parameter && wallbox.recieve.value !== undefined) && wallbox.chargers) {\n        selected = filterByProperty(wallbox.chargers, wallbox.recieve.parameter, wallbox.recieve.value);\n        if (selected.length === 0) {\n            node.warn(\"parameter or value did not macth\");\n            selected = wallbox.chargers;\n        }\n    }\n    if (!selected) {\n        node.warn(\"parameters not given\");\n        selected = wallbox.chargers;\n    }\n    if (actions[actionName]) {\n        actions[actionName](selected);\n    } else {\n        node.warn(\"Unknown action: \" + actionName);\n        text = \"Unknown action: \" + actionName\n        fill = \"red\"\n    }\n}\n\nif (actionName){\n    text = actionName\n    fill = \"yellow\"\n}\n\nnode.send([null, messages])\n\nnode.status({ fill: fill, shape: \"dot\", text: text});",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 400,
+        "wires": [
+            [
+                "aae00b192407c5f0",
+                "230467ce6505d787"
+            ],
+            [
+                "2473a01b03933766"
+            ]
+        ]
+    },
+    {
+        "id": "2473a01b03933766",
+        "type": "delay",
+        "z": "a6c7fbc21c6454ac",
+        "name": "",
+        "pauseType": "delay",
+        "timeout": "400",
+        "timeoutUnits": "milliseconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 630,
+        "y": 400,
+        "wires": [
+            [
+                "643a5d43c6221ae2"
+            ]
+        ]
+    },
+    {
+        "id": "510b67aaf7159976",
+        "type": "inject",
+        "z": "a6c7fbc21c6454ac",
+        "name": "unlock all ",
+        "props": [
+            {
+                "p": "payload.command",
+                "v": "unlock",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 220,
+        "y": 220,
+        "wires": [
+            [
+                "24e11788a9665e2f"
+            ]
+        ]
+    },
+    {
+        "id": "592532bd74bd32f3",
+        "type": "inject",
+        "z": "a6c7fbc21c6454ac",
+        "name": "pause by name",
+        "props": [
+            {
+                "p": "payload.command",
+                "v": "pause",
+                "vt": "str"
+            },
+            {
+                "p": "payload.parameter",
+                "v": "name",
+                "vt": "str"
+            },
+            {
+                "p": "payload.value",
+                "v": "etuovi",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 220,
+        "y": 260,
+        "wires": [
+            [
+                "24e11788a9665e2f"
+            ]
+        ]
+    },
+    {
+        "id": "230467ce6505d787",
+        "type": "debug",
+        "z": "a6c7fbc21c6454ac",
+        "name": "response",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 620,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "b7bf68c68a65c820",
+        "type": "inject",
+        "z": "a6c7fbc21c6454ac",
+        "name": "status",
+        "props": [
+            {
+                "p": "payload.command",
+                "v": "status",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 230,
+        "y": 340,
+        "wires": [
+            [
+                "24e11788a9665e2f"
+            ]
+        ]
+    },
+    {
+        "id": "befec2ed7ec81e54",
+        "type": "inject",
+        "z": "a6c7fbc21c6454ac",
+        "name": "resume by id",
+        "props": [
+            {
+                "p": "payload.command",
+                "v": "pause",
+                "vt": "str"
+            },
+            {
+                "p": "payload.parameter",
+                "v": "id",
+                "vt": "str"
+            },
+            {
+                "p": "payload.value",
+                "v": "12345",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 210,
+        "y": 300,
+        "wires": [
+            [
+                "24e11788a9665e2f"
+            ]
+        ]
+    }
+]

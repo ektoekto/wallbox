@@ -1,0 +1,418 @@
+// user name and password 
+const username = "email.address@provider.com";
+const password = "12345678";
+
+// setup
+let messages = [];
+let actionName
+let wallbox = global.get("wallbox");
+if (wallbox === undefined) {
+    wallbox = {};
+    global.set("wallbox", wallbox);
+}
+let errorState = global.get("wallbox.errorState");
+if (errorState === undefined) {
+    errorState = 1; // 0=has token, 1=no token, 2=update chargers
+    global.set("wallbox.errorState", errorState);
+}
+let selected
+
+let text = "idle"
+let fill = "gray"
+
+const statuses = [
+    { name: "WAITING", values: [164, 180, 181, 183, 184, 185, 186, 187, 188, 189] },
+    { name: "CHARGING", values: [193, 194, 195] },
+    { name: "READY", values: [161, 162] },
+    { name: "PAUSED", values: [178, 182] },
+    { name: "SCHEDULED", values: [177, 179] },
+    { name: "DISCHARGING", values: [196] },
+    { name: "ERROR", values: [14, 15] },
+    { name: "DISCONNECTED", values: [0, 163, null] },
+    { name: "LOCKED", values: [209, 210, 165] },
+    { name: "UPDATING", values: [166] }
+];
+
+const actionsTable = [
+    { name: "RESUME", values: [1] },
+    { name: "PAUSE", values: [2] },
+    { name: "REBOOT", values: [3] },
+    { name: "FACTORY RESET", values: [4] },
+    { name: "UPDATE", values: [5] },
+    { name: "RESUME AFTER MANUAL STOP", values: [9] }
+]
+
+function getStatusNameByNumber(number) {
+    for (let status of statuses) {
+        if (status.values.includes(number)) {
+            return status.name;
+        }
+    }
+    return "Unknown Status";
+}
+function getActionNameByNumber(number) {
+    for (let action of actionsTable) {
+        if (action.values.includes(number)) {
+            return action.name;
+        }
+    }
+    return "Unknown action";
+}
+
+const actions = {
+    unlock: function (selected){
+        for (let i = 0; i < selected.length; i++) {
+            let newMsg = {}
+            newMsg.method = "PUT";
+            newMsg.url = `https://api.wall-box.com/v2/charger/${selected[i].id}`;
+            newMsg.headers = {
+                "Authorization": "Bearer " + wallbox.jwt,
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            };
+            newMsg.payload = {
+                "locked": 0
+            };
+            messages.push(newMsg);
+        }
+    },
+    lock: function (selected) {
+        for (let i = 0; i < selected.length; i++) {
+            let newMsg = {}
+            newMsg.method = "PUT";
+            newMsg.url = `https://api.wall-box.com/v2/charger/${selected[i].id}`;
+            newMsg.headers = {
+                "Authorization": "Bearer " + wallbox.jwt,
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            };
+            newMsg.payload = {
+                "locked": 1
+            };
+            messages.push(newMsg);
+        }
+    },
+    login: function (selected){
+        let newMsg = {};
+        // Base64-coding (Basic Auth)
+        let authString = username + ":" + password;
+        let encodedAuth = Buffer.from(authString).toString("base64");
+        newMsg.method = "GET";
+        newMsg.url = "https://user-api.wall-box.com/users/signin";
+        newMsg.headers = {
+            "Authorization": "Basic " + encodedAuth,
+            "Accept": "application/json",
+            "Partner": "wallbox"
+        };
+        messages.push(newMsg);
+    },
+    charges: function (selected) {
+        let newMsg = {};
+        newMsg.method = "GET";
+        newMsg.url = "https://api.wall-box.com/v3/chargers/groups";
+        newMsg.headers = {
+            "Authorization": "Bearer " + wallbox.jwt,
+            "Accept": "application/json"
+        };
+        messages.push(newMsg);
+    },
+    status: function (selected) {
+        let newMsg = {};
+        newMsg.method = "GET";
+        newMsg.url = "https://api.wall-box.com/v3/chargers/groups";
+        newMsg.headers = {
+            "Authorization": "Bearer " + wallbox.jwt,
+            "Accept": "application/json"
+        };
+        messages.push(newMsg);
+    },
+    pause: function (selected) {
+        for (let i = 0; i < selected.length; i++) {
+            let newMsg = {}
+            newMsg.method = "POST";
+            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;
+            newMsg.headers = {
+                "Authorization": "Bearer " + wallbox.jwt,
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            };
+            newMsg.payload = {
+                "action": 2
+            };
+            messages.push(newMsg);
+        }
+    },
+    resume: function (selected) {
+        for (let i = 0; i < selected.length; i++) {
+            let newMsg = {}
+            newMsg.method = "POST";
+            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;
+            newMsg.headers = {
+                "Authorization": "Bearer " + wallbox.jwt,
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            };
+            newMsg.payload = {
+                "action": 1
+            };
+            messages.push(newMsg);
+        }
+    },
+    reboot: function (selected) {
+        for (let i = 0; i < selected.length; i++) {
+            let newMsg = {}
+            newMsg.method = "POST";
+            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;
+            newMsg.headers = {
+                "Authorization": "Bearer " + wallbox.jwt,
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            };
+            newMsg.payload = {
+                "action": 3
+            };
+            messages.push(newMsg);
+        }
+    },
+    update: function (selected) {
+        for (let i = 0; i < selected.length; i++) {
+            let newMsg = {}
+            newMsg.method = "POST";
+            newMsg.url = `https://api.wall-box.com/v3/chargers/${selected[i].id}/remote-action`;
+            newMsg.headers = {
+                "Authorization": "Bearer " + wallbox.jwt,
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            };
+            newMsg.payload = {
+                "action": 5
+            };
+            messages.push(newMsg);
+        }
+    },
+    reset: function (selected) {
+        global.set("wallbox", {});
+        flow.keys().then(keys => {
+            keys.forEach(key => flow.set(key, null));
+        });
+    }
+
+};
+
+// filtering chargers
+function filterByProperty(array, property, value) {
+    return array.filter(obj =>
+        obj[property] && obj[property].toString().toLowerCase() === value.toString().toLowerCase()
+    );
+}
+
+// if error is recieved
+if (msg.payload && msg.payload.errors !== undefined){
+    for (let i = 0; i < msg.payload.errors.length; i++) {
+        if (msg.payload.errors[i].status === "401"){
+            errorState = 1;
+            global.set("wallbox.errorState", errorState);
+        } else {
+            let response = msg.payload.errors[i].status
+            node.warn(response);
+            text = response
+            fill = "red"
+        }
+    }
+}
+
+// if action is recieved
+if (msg.payload && msg.payload.action !== undefined){
+    let storedRes = flow.get("wallbox_response");
+    let responseMsg
+    let action = getActionNameByNumber(msg.payload.action)
+    if (storedRes) {
+        responseMsg = {
+            payload: action + " was successful. ",
+            _msgid: storedRes._msgid,
+            res: storedRes
+        };
+    } else {
+        responseMsg = {
+            payload: action + " was successful. "
+        }
+    }
+    text = action
+    fill = "green"
+    node.send([responseMsg, null]);
+    global.set("wallbox.recieve", undefined);
+    flow.set("wallbox_response", null);
+}
+
+// if code is recieved
+if (msg.payload && msg.payload.code !== undefined){
+    if (msg.payload.code === 401){
+        errorState = 1;
+    } else {
+        let storedRes = flow.get("wallbox_response");
+        let responseMsg
+        let codeMsg = msg.payload.msg
+        if (storedRes) {
+            responseMsg = {
+                payload: "command " + wallbox.recieve.command + " was not successful. ",
+                _msgid: storedRes._msgid,
+                res: storedRes
+            };
+        } else {
+            responseMsg = {
+                payload: "command " + wallbox.recieve.command + " was not successful. "
+            }
+        }
+        text = "Code: " + msg.payload.code
+        fill = "red"
+        if (codeMsg) {
+            responseMsg.payload = responseMsg.payload + codeMsg
+        }
+        node.send([responseMsg, null]);
+        global.set("wallbox.recieve", undefined);
+        flow.set("wallbox_response", null);
+    }
+
+}
+
+// if the token is recieved
+if (msg.payload && msg.payload.data && msg.payload.data.type !== undefined){
+    if (msg.payload.data.type === "user_signin"){
+        let jwtToken = msg.payload.data.attributes.token;
+        global.set("wallbox.jwt", jwtToken);
+        errorState = 2;
+        global.set("wallbox.errorState", errorState);
+    }
+}
+
+// if chargers are recieved
+if (msg.payload && msg.payload.result && msg.payload.result.groups !== undefined){
+    let groups = msg.payload?.result?.groups || [];
+        if (groups.length > 0 && groups[0].chargers) {
+            global.set("wallbox.chargers", msg.payload.result.groups[0].chargers)
+            errorState = 0;
+            global.set("wallbox.errorState", errorState);
+            if (wallbox.recieve && wallbox.recieve.command !== undefined) {
+                if (wallbox.recieve.command === "status"){
+                    if ((wallbox.recieve && wallbox.recieve.parameter && wallbox.recieve.value !== undefined) && wallbox.chargers) {
+                        selected = filterByProperty(wallbox.chargers, wallbox.recieve.parameter, wallbox.recieve.value);
+                        if (selected.length === 0) {
+                            node.warn("parameter or value did not macth");
+                            selected = wallbox.chargers;
+                        }
+                    }
+                    if (!selected) {
+                        node.warn("parameters not given");
+                        selected = wallbox.chargers;
+                    }
+                    let statusMessage = ""
+                    for (let i = 0; i < selected.length; i++) {
+                        statusMessage = statusMessage + selected[i].name + " is " + getStatusNameByNumber(selected[i].status) + ".\n"
+                    }
+                    let storedRes = flow.get("wallbox_response");
+                    let responseMsg
+                    if (storedRes) {
+                        responseMsg = {
+                            payload: statusMessage,
+                            _msgid: storedRes._msgid,
+                            res: storedRes
+                        };
+                    } else {
+                        responseMsg = {
+                            payload: statusMessage
+                        }
+                    }
+                    node.send([responseMsg, null]);
+                    global.set("wallbox.recieve", undefined);
+                    flow.set("wallbox_response", null);
+                    text = "Status"
+                    fill = "green"
+                }
+            }
+        }
+        else {
+            let response = "No chargers on the account"
+            text = response
+            fill = "red"
+        }
+}
+
+
+// if command is recieved
+if (msg.payload && msg.payload.command !== undefined){
+    if (msg.res) {
+        let safeRes = {
+            _res: msg.res._res,
+            _msgid: msg._msgid
+        };
+        flow.set("wallbox_response", safeRes);
+    }
+    global.set("wallbox.recieve", undefined);
+    global.set("wallbox.recieve", msg.payload);
+}
+
+// if command response is recieved
+if (msg.payload && msg.payload.data && msg.payload.data.chargerData && wallbox.recieve !== undefined){
+    let storedRes = flow.get("wallbox_response");
+    let responseMsg
+    if (storedRes) {
+        responseMsg = {
+            payload: "command " + wallbox.recieve.command + " was successful.",
+            _msgid: storedRes._msgid,
+            res: storedRes
+        };
+    } else {
+        responseMsg = {
+            payload: "command " + wallbox.recieve.command + " was successful."
+        }
+    }
+    text = "Command"
+    fill = "green"
+    node.send([responseMsg, null]);
+    global.set("wallbox.recieve", undefined);
+    flow.set("wallbox_response", null);
+}
+
+if (errorState === 0){
+    if (wallbox.recieve && wallbox.recieve.command !== undefined){
+        actionName = wallbox.recieve.command
+    }
+}
+
+if (errorState === 1) {
+    actionName = "login"
+}
+
+if (errorState === 2) {
+    actionName = "charges"
+}
+
+if (actionName){
+    if ((wallbox.recieve && wallbox.recieve.parameter && wallbox.recieve.value !== undefined) && wallbox.chargers) {
+        selected = filterByProperty(wallbox.chargers, wallbox.recieve.parameter, wallbox.recieve.value);
+        if (selected.length === 0) {
+            node.warn("parameter or value did not macth");
+            selected = wallbox.chargers;
+        }
+    }
+    if (!selected) {
+        node.warn("parameters not given");
+        selected = wallbox.chargers;
+    }
+    if (actions[actionName]) {
+        actions[actionName](selected);
+    } else {
+        node.warn("Unknown action: " + actionName);
+        text = "Unknown action: " + actionName
+        fill = "red"
+    }
+}
+
+if (actionName){
+    text = actionName
+    fill = "yellow"
+}
+
+node.send([null, messages])
+
+node.status({ fill: fill, shape: "dot", text: text});

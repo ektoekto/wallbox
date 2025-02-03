@@ -1,4 +1,4 @@
-This is an example flow/code on how to control wallbox chargers directly with a function node. No need to install additional functions. Feel free to copy any part of it to your own needs. 
+This is a Nodered example flow/code on how to control wallbox chargers directly with a function node. No need to install additional functions. Feel free to copy any part of it to your own needs. 
 ![kuva](https://github.com/user-attachments/assets/628d70f7-a782-411b-a05a-6bb9610a256e)
 
 Modify the wallbox com function with your credentials and it should work. 
